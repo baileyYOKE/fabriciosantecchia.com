@@ -1,0 +1,545 @@
+<!doctype html>
+<!-- Hand-written HTML, CSS and JS. View source freely. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabricio Santecchia</title>
+<meta name="description" content="Fabricio Santecchia builds Factory, a system that runs AI coding agents like a production service, and the Postgres and payment infrastructure under it.">
+<meta property="og:title" content="Fabricio Santecchia">
+<meta property="og:description" content="Coding agents, run like a production service. Plus Postgres replicas with read-your-writes.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141615'/%3E%3Ccircle cx='23' cy='9' r='3.2' fill='%233DD68C'/%3E%3Ctext x='13' y='23' font-family='Inter,Arial' font-size='17' font-weight='600' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* One accent, one meaning: green = running and healthy. Nothing else is green. */
+:root{--bg:#FBFBFA;--surface:#F2F3F1;--card:#fff;--ink:#141615;--sub:#5A5F5C;--faint:#8A8F8C;--line:#E3E5E2;--accent:#0B7A4B;--accent-soft:rgba(11,122,75,.10);--on-accent:#fff;--warn:#B26A00;--warn-soft:rgba(230,159,0,.14);--draft:#fff7d6;--draft-ink:#6b5600}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0C0E0D;--surface:#151816;--card:#1A1D1B;--ink:#E9ECEA;--sub:#9AA19D;--faint:#6A716D;--line:#242826;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12);--on-accent:#0C0E0D;--warn:#F2B13A;--warn-soft:rgba(242,177,58,.14);--draft:#2a2410;--draft-ink:#e6cf7a}}
+:root[data-theme="dark"]{--bg:#0C0E0D;--surface:#151816;--card:#1A1D1B;--ink:#E9ECEA;--sub:#9AA19D;--faint:#6A716D;--line:#242826;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12);--on-accent:#0C0E0D;--warn:#F2B13A;--warn-soft:rgba(242,177,58,.14);--draft:#2a2410;--draft-ink:#e6cf7a}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.65 Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-soft);color:var(--ink)}
+a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
+a:hover{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2{text-wrap:balance}
+.draft{background:var(--draft);color:var(--draft-ink);font-size:13px;padding:10px 16px;text-align:center}
+.wrap{max-width:760px;margin:0 auto;padding:0 24px}
+@media(max-width:600px){.wrap{padding:0 16px}}
+button{font:inherit;color:inherit;cursor:pointer}
+
+.top{display:flex;justify-content:space-between;align-items:center;padding-top:32px}
+.top .name{font-size:15px;font-weight:600}
+.kbd{font:500 12px "JetBrains Mono",monospace;color:var(--sub);border:1px solid var(--line);background:var(--card);border-radius:6px;padding:4px 8px}
+.kbd:hover{color:var(--ink)}
+.hero{padding:72px 0 0}
+h1{font-size:clamp(32px,5.6vw,50px);font-weight:600;letter-spacing:-.03em;line-height:1.08;max-width:700px}
+.lede{font-size:18px;color:var(--sub);margin-top:22px;max-width:620px;line-height:1.6}
+.lede b{color:var(--ink);font-weight:500}
+.links{display:flex;gap:22px;flex-wrap:wrap;margin-top:24px;font-size:15px;font-weight:500}
+@media(max-width:600px){.hero{padding-top:44px}}
+
+.proof{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:60px}
+.proof div{padding:22px 16px 22px 0}
+.proof div+div{padding-left:20px;border-left:1px solid var(--line)}
+.proof b{display:block;font:500 28px/1.1 "JetBrains Mono",monospace;letter-spacing:-.03em}
+.proof span{display:block;color:var(--sub);font-size:14px;margin-top:8px;line-height:1.4}
+@media(max-width:700px){.proof{grid-template-columns:1fr 1fr}.proof div:nth-child(3){padding-left:0;border-left:0}.proof div:nth-child(n+3){border-top:1px solid var(--line)}}
+
+section{margin-top:104px;scroll-margin-top:24px}
+h2{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.body{margin-top:16px;font-size:17px;line-height:1.7;max-width:660px}
+.body+.body{margin-top:14px}
+h3{font-size:17px;font-weight:600;margin-top:48px}
+
+/* Factory demo */
+.demo{margin-top:34px;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+@media(min-width:1040px){.demo,.trace{margin-left:-110px;margin-right:-110px}}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.bar .title{font:500 13px "JetBrains Mono",monospace;margin-right:auto;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.dot.on{background:var(--accent)}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 11px;font-size:13px;font-weight:500}
+.btn:hover{border-color:var(--sub)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn[aria-pressed="true"]{border-color:var(--warn);background:var(--warn-soft)}
+.btn:disabled{opacity:.45;cursor:default}
+.stations{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:18px 16px 6px}
+.st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 11px 11px;min-width:0;transition:border-color .2s,box-shadow .2s}
+.st .r{font:500 11px "JetBrains Mono",monospace;color:var(--faint);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.st .t{font-size:13.5px;font-weight:600;margin-top:4px;line-height:1.3}
+.st .m{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.4}
+.st .s{font:500 11px "JetBrains Mono",monospace;color:var(--faint);margin-top:8px}
+.st.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.st.active .s{color:var(--accent)}
+.st.done .s{color:var(--sub)}
+.st.reject{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.st.reject .s{color:var(--warn)}
+.st.dead{border-style:dashed;border-color:var(--faint);opacity:.75;box-shadow:none}
+.st.dead .t,.st.dead .m,.st.dead .s{color:var(--faint)}
+.lower{display:grid;grid-template-columns:1.6fr 1fr;gap:10px;padding:10px 16px 16px}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.pane h4{font:500 11px "JetBrains Mono",monospace;color:var(--faint);display:flex;justify-content:space-between}
+.log{font:12px/1.65 "JetBrains Mono",monospace;margin-top:6px;height:166px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--sub)}
+.log div:last-child{color:var(--ink)}
+.log .n{color:var(--faint);margin-right:8px}
+.log .ok{color:var(--accent)}
+.log .w{color:var(--warn)}
+.wd{font:12px/1.7 "JetBrains Mono",monospace;margin-top:6px;color:var(--sub)}
+.wd b{font-weight:500;color:var(--ink)}
+.meter{height:4px;background:var(--line);border-radius:2px;margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--accent)}
+.cap{font-size:12.5px;color:var(--faint);padding:0 16px 14px}
+@media(max-width:820px){.stations{grid-template-columns:repeat(3,1fr)}.lower{grid-template-columns:1fr}}
+@media(max-width:480px){.stations{grid-template-columns:1fr 1fr}.bar .title{width:100%}}
+
+.rows{list-style:none;border-top:1px solid var(--line);margin-top:20px}
+.rows li{display:flex;gap:28px;justify-content:space-between;align-items:baseline;padding:18px 0;border-bottom:1px solid var(--line)}
+.rows .main{min-width:0;max-width:540px}
+.rows .t{font-weight:600}
+.rows .d{color:var(--sub);margin-top:4px;font-size:15px;line-height:1.6}
+.rows .n{text-align:right;flex:none;max-width:170px}
+.rows .n b{display:block;font:500 17px "JetBrains Mono",monospace;letter-spacing:-.02em;white-space:nowrap}
+.rows .n span{display:block;font-size:12.5px;color:var(--sub);line-height:1.35;margin-top:3px}
+.rows .y{color:var(--sub);font:14px "JetBrains Mono",monospace;white-space:nowrap}
+@media(max-width:600px){.rows li{flex-direction:column;gap:6px}.rows .n{text-align:left;max-width:none}.rows .n b,.rows .n span{display:inline}.rows .n span{margin-left:8px}.rows li.exp{flex-direction:row;gap:16px}}
+.dec{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:28px 40px}
+.dec b{display:block;font-weight:600;font-size:15.5px}
+.dec p{color:var(--sub);font-size:15px;margin-top:4px;line-height:1.6}
+@media(max-width:640px){.dec{grid-template-columns:1fr;gap:22px}}
+
+/* replica trace */
+.trace{margin-top:30px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 16px 16px}
+.trace .head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.trace .head .mono{font-size:13px;font-weight:500}
+.nodes{margin-top:14px;display:grid;gap:8px}
+.nd{display:grid;grid-template-columns:110px 1fr 120px;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;transition:border-color .2s,box-shadow .2s}
+.nd .nm{font:500 12.5px "JetBrains Mono",monospace}
+.nd .lsn{font:12.5px "JetBrains Mono",monospace;text-align:right;color:var(--sub)}
+.nd .track{height:6px;background:var(--line);border-radius:3px;position:relative}
+.nd .fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--faint);transition:width .5s ease}
+.nd .tok{position:absolute;top:-5px;width:2px;height:16px;background:var(--ink);opacity:0;transition:left .5s ease,opacity .2s}
+.nd.hot{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nd.hot .fill{background:var(--accent)}
+.nd.behind{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.nd.behind .fill{background:var(--warn)}
+.tcap{margin-top:14px;font-size:15px;line-height:1.6;min-height:50px}
+.tnav{display:flex;align-items:center;gap:8px;margin-top:12px}
+.tnav .c{font:12px "JetBrains Mono",monospace;color:var(--faint);margin-left:auto}
+@media(max-width:560px){.nd{grid-template-columns:84px 1fr}.nd .lsn{grid-column:1/-1;text-align:left}}
+
+.talks{list-style:none;margin-top:20px;border-top:1px solid var(--line)}
+.talks li{padding:15px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:18px;align-items:baseline}
+.talks .st2{font:12px "JetBrains Mono",monospace;color:var(--faint);white-space:nowrap}
+.bio{margin-top:20px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:none;padding:6px 12px;font-size:13px;font-weight:500;color:var(--sub)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.bio .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.bio p{margin-top:14px;font-size:15.5px;line-height:1.65}
+
+.contact .mail{font-size:22px;font-weight:500;display:inline-block;margin-top:14px;word-break:break-all}
+footer{margin:110px 0 64px;padding-top:18px;border-top:1px solid var(--line);font:12px/1.8 "JetBrains Mono",monospace;color:var(--sub)}
+footer .hint{color:var(--faint)}
+
+dialog{margin:12vh auto 0;width:min(560px,calc(100% - 32px));border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:0;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
+#q{width:100%;border:0;border-bottom:1px solid var(--line);background:none;padding:15px 16px;font:15px Inter,sans-serif;color:var(--ink);outline:none}
+#cmds{list-style:none;max-height:340px;overflow:auto;padding:6px}
+#cmds li{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;font-size:14px;cursor:pointer}
+#cmds li span{font:12px "JetBrains Mono",monospace;color:var(--faint)}
+#cmds li.sel{background:var(--accent-soft)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);font-size:13px;padding:8px 14px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <div class="name">Fabricio Santecchia</div>
+    <button class="kbd" id="openPal" aria-label="Open command menu">⌘K</button>
+  </div>
+
+  <header class="hero">
+    <h1>I built Factory, the system my team's AI coding agents work in, and the Postgres and payment code under our apps.</h1>
+    <p class="lede">Senior engineer at <b>YOKE</b>, the company behind <b>NIL Club</b> and <b>Athlete Merch</b>. Before that, six years at <b>Cameo</b>. Thirteen years shipping production software. Based in Zug, Switzerland.</p>
+    <div class="links">
+      <a href="#contact">Email</a>
+      <a href="https://www.linkedin.com/in/fabricio-santecchia-28b317b9/">LinkedIn</a>
+      <a href="https://github.com/fsantecchia">GitHub</a>
+    </div>
+  </header>
+
+  <div class="proof">
+    <div><b>121</b><span>agent pull requests merged since September</span></div>
+    <div><b>11+</b><span>teammates who send it work</span></div>
+    <div><b>816</b><span>app screens mapped by agents</span></div>
+    <div><b>685</b><span>of his PRs merged in October, up from ~40 a month</span></div>
+  </div>
+
+  <section id="factory">
+    <h2>Factory: coding agents, run like a production service</h2>
+    <p class="body">Most teams use one AI coding assistant at a time, with a person watching it. Factory runs a crew of them on its own. A teammate asks in Slack, and agents plan the work, write it in an isolated copy of the codebase, prove it on a real iPhone simulator, have a second model check it blind, and come back with a pull request and screenshots.</p>
+    <p class="body">Most of the engineering is operations: leases, health checks, failover between model vendors, and gates the agents can't talk their way around. Try breaking it.</p>
+
+    <div class="demo" id="demo">
+      <div class="bar">
+        <div class="title"><span class="dot" id="liveDot"></span>factory <span style="color:var(--faint)">simulation</span></div>
+        <button class="btn primary" id="run">Run a job</button>
+        <button class="btn" id="kill">Kill the executor</button>
+        <button class="btn" id="outage" aria-pressed="false">Gemini outage</button>
+        <button class="btn" id="defect" aria-pressed="false">Plant a defect</button>
+      </div>
+      <div class="stations" id="stations"></div>
+      <div class="lower">
+        <div class="pane"><h4><span>mailbox, append-only</span><span id="mcount">0 letters</span></h4><div class="log" id="log" aria-live="polite"></div></div>
+        <div class="pane"><h4><span>watchdog</span><span id="wdState">ok</span></h4>
+          <div class="wd">checks every <b>5 min</b><br>here every 5 s<br>checks run: <b id="wdChecks">0</b><br>restarts: <b id="wdRestarts">0</b></div>
+          <div class="meter"><i id="wdMeter"></i></div>
+        </div>
+      </div>
+      <p class="cap">Simulated, with timings compressed. The structure is real; the data is made up. Open the console and type <span class="mono">factory.status()</span>.</p>
+    </div>
+
+    <h3>Engineering decisions</h3>
+    <div class="dec">
+      <div><b>Rules live in code, not prompts</b><p>Shell shims and gates refuse any push, simulator or approval an agent isn't leased for.</p></div>
+      <div><b>Letters, not pushes</b><p>An append-only mailbox is the single source of truth, so a crashed agent loses nothing.</p></div>
+      <div><b>No single vendor</b><p>Agents fail over between Gemini and Claude on outages or when quota runs low.</p></div>
+      <div><b>Every UI change comes with proof</b><p>Simulator screenshots and a blind review from a different model family.</p></div>
+    </div>
+
+    <ul class="rows">
+      <li><div class="main"><div class="t">Pull requests from Factory jobs</div><div class="d">Opened from Slack requests, Sept 16 to Nov 5, 2026</div></div><div class="n"><b>121 of 131</b><span>merged</span></div></li>
+      <li><div class="main"><div class="t">Slack request to decision</div><div class="d">Slowest 1%, after moving the Slack door to its own worker thread. During a slow-disk incident: 151 s to 2 s</div></div><div class="n"><b>31.6s → 0.45s</b><span>p99</span></div></li>
+      <li><div class="main"><div class="t">A silent failure, now caught</div><div class="d">On Oct 26 an expired login left 17 agents running empty turns for about 2.5 hours, unnoticed. The watchdog now alerts after two failures in 30 minutes</div></div><div class="n"><b>2.5h → 30m</b><span>to detect</span></div></li>
+      <li><div class="main"><div class="t">Memory per agent simulator</div><div class="d">A slimmed iOS simulator profile built for agent walks</div></div><div class="n"><b>4.3 → 1.6 GB</b><span>per simulator</span></div></li>
+    </ul>
+  </section>
+
+  <section id="replicas">
+    <h2>Read-your-writes on Postgres replicas</h2>
+    <p class="body">I moved our reads onto self-hosted Postgres replicas on Kubernetes. The classic catch: you save something, read it back from a replica, and it isn't there yet. The fix is a token. Step through it.</p>
+
+    <div class="trace" id="trace">
+      <div class="head"><span class="mono">read-your-writes</span><span class="mono" style="font-size:12px;color:var(--faint)">illustrative trace, real mechanism</span></div>
+      <div class="nodes" id="nodes"></div>
+      <p class="tcap" id="tcap"></p>
+      <div class="tnav"><button class="btn" id="tBack">Back</button><button class="btn primary" id="tNext">Next</button><span class="c" id="tCount"></span></div>
+    </div>
+
+    <ul class="rows">
+      <li><div class="main"><div class="t">Median wait for a fresh read</div><div class="d">After tuning how often the primary flushes its write-ahead log</div></div><div class="n"><b>110 → 53 ms</b><span>p50</span></div></li>
+      <li><div class="main"><div class="t">Replica replay lag</div><div class="d">Measured overnight</div></div><div class="n"><b>1 to 5 ms</b><span>lag</span></div></li>
+    </ul>
+  </section>
+
+  <section id="built">
+    <h2>Also built</h2>
+    <ul class="rows">
+      <li><div class="main"><div class="t">Atlas, a product map agents keep current</div><div class="d">816 catalogued screens across four apps, walked by agents on simulators and browsers. Each pull request shows the screens it can change, worked out from the import graph.</div></div><div class="n"><b>270</b><span>automated PRs merged</span></div></li>
+      <li><div class="main"><div class="t">An MCP server for AI-safe admin work</div><div class="d">Staff change the product through an AI assistant. Each tool is exactly one confirmed, audited change, behind OAuth 2.1. I started it; the team has grown it since.</div></div><div class="n"><b>73</b><span>write tools</span></div></li>
+      <li><div class="main"><div class="t">Money paths tested against double-pays</div><div class="d">An append-only ledger for athlete balances, and Athlete Merch payment, refund and shipping writes that decide inside their own transaction. With Richard Zheng and Atif Mumtaz.</div></div><div class="n"><b>11</b><span>money paths, each tested</span></div></li>
+      <li><div class="main"><div class="t">Measured AI design QA</div><div class="d">Checks built screens against Figma, evaluated with planted defects on held-out seeds.</div></div><div class="n"><b>92.7%</b><span>defects caught; 0 false flags on a clean build</span></div></li>
+    </ul>
+  </section>
+
+  <section id="talks">
+    <h2>Talk proposals</h2>
+    <ul class="talks">
+      <li><span>From one coding agent to a 13-Mac agent factory: what broke, and what we automated</span><span class="st2">proposal</span></li>
+      <li><span>Read-your-writes across logical and physical Postgres replication</span><span class="st2">proposal</span></li>
+      <li><span>Designing MCP write tools a human can actually confirm</span><span class="st2">proposal</span></li>
+      <li><span>How to measure an AI QA tool: planted defects and confidence intervals</span><span class="st2">proposal</span></li>
+    </ul>
+    <div class="bio" id="bio">
+      <div class="row"><div class="seg"><button aria-pressed="true" data-b="short">Short bio</button><button aria-pressed="false" data-b="long">Long bio</button></div><button class="btn" id="copyBio">Copy</button></div>
+      <p id="bioText"></p>
+    </div>
+  </section>
+
+  <section id="experience">
+    <h2>Thirteen years of shipping</h2>
+    <ul class="rows">
+      <li class="exp"><div class="main"><div class="t">YOKE</div><div class="d">Senior software engineer, NIL Club and Athlete Merch</div></div><div class="y">2024 to now</div></li>
+      <li class="exp"><div class="main"><div class="t">Cameo</div><div class="d">Senior software engineer, web, React Native and APIs</div></div><div class="y">2018 to 2024</div></li>
+      <li class="exp"><div class="main"><div class="t">Darkheim Game Studio</div><div class="d">Founder, two Android games</div></div><div class="y">2019 to 2021</div></li>
+      <li class="exp"><div class="main"><div class="t">Globant and freelance</div><div class="d">Southwest, Thomas Cook and Cisco</div></div><div class="y">2013 to 2018</div></li>
+    </ul>
+  </section>
+
+  <section class="contact" id="contact">
+    <h2>Reviewing, judging or speaking</h2>
+    <p class="body">Glad to review talks, judge technical work, or compare notes on running agents in production.</p>
+    <a class="mail" href="mailto:fabricio@fabriciosantecchia.com">fabricio@fabriciosantecchia.com</a>
+  </section>
+
+  <footer>
+    <div>build <span data-build="sha">a354bb5</span> · deployed <span data-build="date">2026-11-06 14:54 UTC</span> · <span id="weight">page weight measured on load</span></div>
+    <div>Hand-written HTML, CSS and JS. No framework, no analytics.</div>
+    <div class="hint">Press ⌘K or ? for commands.</div>
+  </footer>
+</div>
+
+<dialog id="pal" aria-label="Command menu">
+  <input id="q" placeholder="Type a command" autocomplete="off" aria-label="Search commands">
+  <ul id="cmds" role="listbox"></ul>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* Everything below is a simulation for this page. No network calls, no real data. */
+(() => {
+  const $ = s => document.querySelector(s);
+  const toast = msg => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1600); };
+
+  /* Factory simulation */
+  const ST = [
+    { id: 'request', r: 'request', t: 'Slack thread', m: 'A teammate asks for a change' },
+    { id: 'lead', r: 'lead', t: 'Plans the job', m: 'One lead per thread' },
+    { id: 'executor', r: 'executor', t: 'Writes and tests', m: 'In its own worktree' },
+    { id: 'walker', r: 'walker', t: 'Proves it on a phone', m: 'Leased iOS simulator' },
+    { id: 'qa', r: 'blind QA', t: 'Judges it blind', m: 'A different model family' },
+    { id: 'ship', r: 'ship', t: 'Pull request', m: 'Back to the thread' },
+  ];
+  const stEl = {};
+  $('#stations').innerHTML = ST.map(s => `<div class="st" id="st-${s.id}"><div class="r"><span>${s.r}</span><span id="v-${s.id}"></span></div><div class="t">${s.t}</div><div class="m">${s.m}</div><div class="s" id="s-${s.id}">idle</div></div>`).join('');
+  ST.forEach(s => stEl[s.id] = $('#st-' + s.id));
+
+  const TICK = 900;
+  const f = { letters: 0, log: [], job: 0, running: false, dead: false, outage: false, defect: false, rejected: false, checks: 0, restarts: 0, timer: null, visible: true, queue: [] };
+  const vendor = () => f.outage ? 'claude' : 'gemini';
+  const judge = () => vendor() === 'gemini' ? 'claude' : 'gemini';
+
+  function letter(text, cls = '') {
+    f.letters++;
+    f.log.push({ n: f.letters, text });
+    const el = document.createElement('div');
+    el.innerHTML = `<span class="n">#${String(f.letters).padStart(3, '0')}</span><span class="${cls}"></span>`;
+    el.lastChild.textContent = text;
+    const log = $('#log'); log.appendChild(el);
+    while (log.children.length > 9) log.removeChild(log.firstChild);
+    $('#mcount').textContent = f.letters + (f.letters === 1 ? ' letter' : ' letters');
+  }
+  function setSt(id, cls, label) {
+    const el = stEl[id]; el.classList.remove('active', 'done', 'reject', 'dead');
+    if (cls) el.classList.add(cls);
+    $('#s-' + id).textContent = label;
+  }
+  function vendors() {
+    $('#v-lead').textContent = 'opus';
+    $('#v-executor').textContent = f.dead ? '' : vendor();
+    $('#v-qa').textContent = judge();
+  }
+  const liveDot = () => $('#liveDot').classList.toggle('on', f.running && !f.dead);
+
+  function finishQA() {
+    setSt('qa', 'done', 'approved'); letter(`qa[${judge()}]: approved, no findings`, 'ok');
+    f.queue.unshift(
+      () => { setSt('ship', 'active', 'opened'); letter('factory → slack: pull request opened with screenshots', 'ok'); },
+      () => { setSt('ship', 'done', 'merged'); endJob(); },
+    );
+  }
+  function plan() {
+    const j = f.job;
+    return [
+      () => { ST.forEach(s => setSt(s.id, '', 'idle')); setSt('request', 'active', 'received'); letter(`slack → lead: job ${j} received`); },
+      () => { setSt('request', 'done', 'done'); setSt('lead', 'active', 'planning'); letter('lead: plan ready, 2 tasks'); },
+      () => { setSt('lead', 'done', 'done'); setSt('executor', 'active', 'writing'); letter(`lead → executor[${vendor()}]: task 1`); },
+      () => { setSt('executor', 'active', 'testing'); letter(`executor[${vendor()}]: tests pass, pushed`, 'ok'); },
+      () => { setSt('executor', 'done', 'done'); setSt('walker', 'active', 'walking'); letter('walker: leased sim-02, walking 6 screens'); },
+      () => { setSt('walker', 'done', '6 stills'); setSt('qa', 'active', 'reviewing'); letter('walker → qa: 6 screenshots attached'); },
+      () => {
+        if (f.defect && !f.rejected) {
+          f.rejected = true;
+          setSt('qa', 'reject', 'rejected'); setSt('executor', 'active', 'fixing');
+          letter(`qa[${judge()}]: reject, button label clipped on small phones`, 'w');
+          f.queue.unshift(
+            () => { letter(`executor[${vendor()}]: fix pushed`, 'ok'); setSt('executor', 'done', 'done'); setSt('walker', 'active', 'walking'); },
+            () => { letter('walker: re-walked 6 screens'); setSt('walker', 'done', '6 stills'); setSt('qa', 'active', 'reviewing'); },
+            () => finishQA(),
+          );
+          return;
+        }
+        finishQA();
+      },
+    ];
+  }
+  function endJob() {
+    f.running = false; f.defect = false; f.rejected = false;
+    $('#defect').setAttribute('aria-pressed', 'false');
+    $('#run').disabled = false; $('#run').textContent = 'Run another job'; liveDot();
+  }
+  function pump() {
+    clearTimeout(f.timer);
+    if (!f.running || !f.visible) return;
+    if (f.dead) { f.timer = setTimeout(pump, 300); return; } // a dead executor stalls the line
+    const next = f.queue.shift();
+    if (!next) return endJob();
+    next(); vendors();
+    if (f.running) f.timer = setTimeout(pump, TICK);
+  }
+  function run() {
+    if (f.running) return;
+    f.job++; f.running = true; f.rejected = false; f.queue = plan();
+    $('#run').disabled = true; liveDot(); pump();
+  }
+  function kill() {
+    if (f.dead) return;
+    f.dead = true; vendors();
+    setSt('executor', 'dead', 'exited');
+    letter('executor: exited (signal 9)', 'w');
+    $('#wdState').textContent = 'checking';
+    liveDot();
+  }
+  // The watchdog runs on its own clock, independent of the job loop.
+  let wdT = 0; const WD = 5000;
+  setInterval(() => {
+    if (!f.visible) return;
+    wdT += 100; $('#wdMeter').style.width = Math.min(100, wdT / WD * 100) + '%';
+    if (wdT < WD) return;
+    wdT = 0; f.checks++; $('#wdChecks').textContent = f.checks;
+    if (f.dead) {
+      f.restarts++; $('#wdRestarts').textContent = f.restarts;
+      letter('watchdog: executor unhealthy, restarting');
+      f.dead = false;
+      letter(`executor[${vendor()}]: replayed mailbox, resuming`, 'ok');
+      const inJob = f.running && f.queue.length > 0;
+      setSt('executor', inJob ? 'active' : '', inJob ? 'resumed' : 'idle');
+      $('#wdState').textContent = 'ok'; vendors(); liveDot();
+    }
+  }, 100);
+
+  $('#run').onclick = run;
+  $('#kill').onclick = kill;
+  $('#outage').onclick = e => {
+    f.outage = !f.outage; e.currentTarget.setAttribute('aria-pressed', f.outage);
+    letter(f.outage ? 'executor: gemini unavailable, failing over to claude' : 'executor: gemini healthy again', f.outage ? 'w' : 'ok');
+    vendors();
+  };
+  $('#defect').onclick = e => {
+    f.defect = !f.defect; e.currentTarget.setAttribute('aria-pressed', f.defect);
+    if (f.defect) toast('Defect planted. Blind QA should catch it.');
+  };
+  new IntersectionObserver(es => es.forEach(e => { f.visible = e.isIntersecting; if (f.visible) pump(); })).observe($('#demo'));
+  vendors(); letter('factory: ready, 6 stations, watchdog armed');
+
+  // For the people who open devtools.
+  window.factory = {
+    status() { console.table(ST.map(s => ({ station: s.r, state: $('#s-' + s.id).textContent, model: $('#v-' + s.id).textContent }))); return f.dead ? 'executor down, the watchdog will restart it' : 'all stations healthy'; },
+    tail(n = 10) { f.log.slice(-n).forEach(l => console.log('#' + String(l.n).padStart(3, '0'), l.text)); return f.letters + ' letters'; },
+    kill(name = 'executor') { if (name !== 'executor') return 'only the executor can be killed here'; kill(); return 'killed. Watch the page.'; },
+    run() { run(); return 'job started'; },
+  };
+  console.log('%cfactory%c simulation loaded. Try factory.status(), factory.tail(), factory.kill(), factory.run()', 'font-weight:600', 'color:gray');
+
+  /* Read-your-writes trace */
+  const NODES = ['primary', 'replica-1', 'replica-2'];
+  $('#nodes').innerHTML = NODES.map(n => `<div class="nd" id="nd-${n}"><span class="nm">${n}</span><div class="track"><div class="fill"></div><div class="tok"></div></div><span class="lsn"></span></div>`).join('');
+  const base = 0x3A41000, span = 0x200;
+  const lsn = v => '0/' + (base + v).toString(16).toUpperCase();
+  const T = [
+    { c: 'A client writes. The primary commits it at LSN 0/3A411F0 and hands that position back as a token.', p: 0x1F0, r1: 0x150, r2: 0x0E0, hot: ['primary'], tok: null },
+    { c: 'The client reads, sending the token along: "show me data at least this fresh."', p: 0x1F0, r1: 0x150, r2: 0x0E0, tok: 0x1F0 },
+    { c: 'The proxy checks replica-1. It has only replayed up to 0/3A41170, behind the token, so reading there would miss the write.', p: 0x1F0, r1: 0x170, r2: 0x0F0, behind: ['replica-1'], tok: 0x1F0 },
+    { c: 'It waits, at most one second, for replay to pass the token. Usually this takes milliseconds.', p: 0x1F8, r1: 0x1E0, r2: 0x110, behind: ['replica-1'], tok: 0x1F0 },
+    { c: 'replica-1 has now applied past the token. The read runs there and sees the write. The primary never had to serve it.', p: 0x1F8, r1: 0x1F8, r2: 0x130, hot: ['replica-1'], tok: 0x1F0 },
+    { c: 'If no replica catches up within a second, the proxy answers 409 and the read falls back to the primary. Slower, never stale.', p: 0x1F8, r1: 0x1F8, r2: 0x150, hot: ['primary'], behind: ['replica-2'], tok: 0x1F0 },
+  ];
+  let ti = 0;
+  function drawT() {
+    const s = T[ti];
+    const vals = { primary: s.p, 'replica-1': s.r1, 'replica-2': s.r2 };
+    NODES.forEach(n => {
+      const el = $('#nd-' + n); el.classList.remove('hot', 'behind');
+      if ((s.hot || []).includes(n)) el.classList.add('hot');
+      if ((s.behind || []).includes(n)) el.classList.add('behind');
+      el.querySelector('.fill').style.width = (vals[n] / span * 100) + '%';
+      el.querySelector('.lsn').textContent = lsn(vals[n]);
+      const tok = el.querySelector('.tok');
+      tok.style.opacity = s.tok ? .9 : 0;
+      if (s.tok) tok.style.left = (s.tok / span * 100) + '%';
+    });
+    $('#tcap').textContent = s.c;
+    $('#tCount').textContent = (ti + 1) + ' / ' + T.length;
+    $('#tBack').disabled = ti === 0;
+    $('#tNext').textContent = ti === T.length - 1 ? 'Start over' : 'Next';
+  }
+  $('#tNext').onclick = () => { ti = ti === T.length - 1 ? 0 : ti + 1; drawT(); };
+  $('#tBack').onclick = () => { if (ti) { ti--; drawT(); } };
+  drawT();
+
+  /* Speaker bio */
+  const BIO = {
+    short: 'Fabricio Santecchia is a senior engineer at YOKE (NIL Club, Athlete Merch) who builds Factory, a system that runs AI coding agents like a production service, and the Postgres infrastructure under it. Previously six years at Cameo.',
+    long: "Fabricio Santecchia is a senior engineer at YOKE, the company behind NIL Club and Athlete Merch. He built Factory, which runs AI coding agents like a production service: teammates ask in Slack, and agents plan, write, test on real iOS simulators and get a blind review from a second model before opening a pull request, with leases, a self-healing watchdog and failover between model vendors. He also moved YOKE's reads onto self-hosted Postgres replicas with read-your-writes consistency, and built an MCP server where every AI write is one confirmed, audited change. Before YOKE he spent six years as a senior engineer at Cameo. He lives in Zug, Switzerland.",
+  };
+  let bio = 'short';
+  const drawBio = () => { $('#bioText').textContent = BIO[bio]; document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.b === bio)); };
+  document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { bio = b.dataset.b; drawBio(); });
+  const copy = (txt, msg) => navigator.clipboard.writeText(txt).then(() => toast(msg), () => toast('Copy failed'));
+  $('#copyBio').onclick = () => copy(BIO[bio], 'Bio copied');
+  drawBio();
+
+  /* Footer: page weight, measured by the browser, not typed by hand */
+  addEventListener('load', () => setTimeout(() => {
+    const entries = [...performance.getEntriesByType('navigation'), ...performance.getEntriesByType('resource')];
+    const bytes = entries.reduce((a, e) => a + (e.transferSize || 0), 0);
+    if (bytes > 0) $('#weight').textContent = (bytes / 1024).toFixed(1) + ' KB transferred, ' + entries.length + ' requests';
+  }, 300));
+
+  /* Command menu */
+  const go = id => () => document.getElementById(id).scrollIntoView();
+  const CMDS = [
+    { n: 'Go to Factory', k: 'g f', a: go('factory') },
+    { n: 'Go to read-your-writes', k: 'g r', a: go('replicas') },
+    { n: 'Go to talk proposals', k: 'g t', a: go('talks') },
+    { n: 'Run a Factory job', k: 'r', a: () => { go('factory')(); run(); } },
+    { n: 'Kill the executor', k: 'x', a: () => { go('factory')(); kill(); } },
+    { n: 'Copy email', k: '', a: () => copy('fabricio@fabriciosantecchia.com', 'Email copied') },
+    { n: 'Copy short bio', k: '', a: () => copy(BIO.short, 'Bio copied') },
+    { n: 'Theme: light', k: '', a: () => document.documentElement.dataset.theme = 'light' },
+    { n: 'Theme: dark', k: '', a: () => document.documentElement.dataset.theme = 'dark' },
+    { n: 'Theme: system', k: '', a: () => { delete document.documentElement.dataset.theme; } },
+  ];
+  const pal = $('#pal'), q = $('#q'), list = $('#cmds');
+  let sel = 0, shown = CMDS;
+  function drawCmds() {
+    const v = q.value.toLowerCase().trim();
+    shown = CMDS.filter(c => c.n.toLowerCase().includes(v));
+    sel = Math.min(sel, Math.max(0, shown.length - 1));
+    list.innerHTML = shown.map((c, i) => `<li role="option" aria-selected="${i === sel}" class="${i === sel ? 'sel' : ''}" data-i="${i}">${c.n}<span>${c.k}</span></li>`).join('') || '<li>No matching command</li>';
+  }
+  function openPal() { q.value = ''; sel = 0; drawCmds(); pal.showModal(); q.focus(); }
+  function exec(i) { const c = shown[i]; if (!c) return; pal.close(); c.a(); }
+  $('#openPal').onclick = openPal;
+  q.oninput = () => { sel = 0; drawCmds(); };
+  list.onclick = e => { const li = e.target.closest('li[data-i]'); if (li) exec(+li.dataset.i); };
+  pal.addEventListener('click', e => { if (e.target === pal) pal.close(); });
+  q.onkeydown = e => {
+    if (!shown.length) return;
+    if (e.key === 'ArrowDown') { sel = (sel + 1) % shown.length; drawCmds(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { sel = (sel - 1 + shown.length) % shown.length; drawCmds(); e.preventDefault(); }
+    if (e.key === 'Enter') exec(sel);
+  };
+  let gPending = false;
+  addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); pal.open ? pal.close() : openPal(); return; }
+    if (pal.open || /INPUT|TEXTAREA/.test(document.activeElement.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === '?') { openPal(); return; }
+    if (gPending) { gPending = false; const m = { f: 'factory', r: 'replicas', t: 'talks' }[e.key]; if (m) go(m)(); return; }
+    if (e.key === 'g') { gPending = true; setTimeout(() => gPending = false, 800); return; }
+    if (e.key === 'r') run();
+    if (e.key === 'x') kill();
+  });
+})();
+</script>
+</body>
+</html>
