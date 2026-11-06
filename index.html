@@ -73,6 +73,8 @@ h3{font-size:17px;font-weight:600;margin-top:48px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn[aria-pressed="true"]{border-color:var(--warn);background:var(--warn-soft)}
 .btn:disabled{opacity:.45;cursor:default}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,214,140,.55)}100%{box-shadow:0 0 0 12px rgba(61,214,140,0)}}
+.btn.pulse{animation:pulse 1s ease-out 3}
 .stations{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:18px 16px 6px}
 .st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 11px 11px;min-width:0;transition:border-color .2s,box-shadow .2s}
 .st .r{font:500 11px "JetBrains Mono",monospace;color:var(--faint);display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -290,7 +292,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
   </section>
 
   <footer>
-    <div>build <span data-build="sha">592fada</span> · deployed <span data-build="date">2026-11-06 15:27 UTC</span> · <span id="weight">page weight measured on load</span></div>
+    <div>build <span data-build="sha">da3f3e6</span> · deployed <span data-build="date">2026-11-06 18:54 UTC</span> · <span id="weight">page weight measured on load</span></div>
     <div>Hand-written HTML, CSS and JS. No framework, no analytics.</div>
     <div class="hint">Press ⌘K or ? for commands.</div>
   </footer>
@@ -369,6 +371,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
           f.rejected = true;
           setSt('qa', 'reject', 'rejected'); setSt('executor', 'active', 'fixing');
           letter(`qa[${judge()}]: reject, button label clipped on small phones`, 'w');
+          f.hold = 1800; // let the rejection sit on screen
           f.queue.unshift(
             () => { letter(`executor[${vendor()}]: fix pushed`, 'ok'); setSt('executor', 'done', 'done'); setSt('walker', 'active', 'walking'); },
             () => { letter('walker: re-walked 6 screens'); setSt('walker', 'done', '6 stills'); setSt('qa', 'active', 'reviewing'); },
@@ -392,7 +395,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
     const next = f.queue.shift();
     if (!next) return endJob();
     next(); vendors();
-    if (f.running) f.timer = setTimeout(pump, TICK);
+    if (f.running) { f.timer = setTimeout(pump, TICK + (f.hold || 0)); f.hold = 0; }
   }
   function run() {
     if (f.running) return;
@@ -434,7 +437,11 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
   };
   $('#defect').onclick = e => {
     f.defect = !f.defect; e.currentTarget.setAttribute('aria-pressed', f.defect);
-    if (f.defect) toast('Defect planted. Blind QA should catch it.');
+    if (!f.defect) return;
+    if (f.running) { toast('Bug planted. Blind QA should catch it.'); return; }
+    toast('Bug planted. Now hit Run a job.');
+    const r = $('#run'); r.classList.remove('pulse'); void r.offsetWidth; r.classList.add('pulse');
+    setTimeout(() => r.classList.remove('pulse'), 3200);
   };
   new IntersectionObserver(es => es.forEach(e => { f.visible = e.isIntersecting; if (f.visible) pump(); })).observe($('#demo'));
   vendors(); letter('factory: ready, 6 stations, watchdog armed');
