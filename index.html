@@ -8,16 +8,17 @@
 <meta name="description" content="Fabricio Santecchia builds Factory, a system that runs AI coding agents like a production service, and the Postgres and payment infrastructure under it.">
 <meta property="og:title" content="Fabricio Santecchia">
 <meta property="og:description" content="Coding agents, run like a production service. Plus Postgres replicas with read-your-writes.">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090A">
+<meta property="og:image" content="https://fabriciosantecchia.com/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141615'/%3E%3Ccircle cx='23' cy='9' r='3.2' fill='%233DD68C'/%3E%3Ctext x='13' y='23' font-family='Inter,Arial' font-size='17' font-weight='600' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* One accent, one meaning: green = running and healthy. Nothing else is green. */
-:root{--bg:#FBFBFA;--surface:#F2F3F1;--card:#fff;--ink:#141615;--sub:#5A5F5C;--faint:#8A8F8C;--line:#E3E5E2;--accent:#0B7A4B;--accent-soft:rgba(11,122,75,.10);--on-accent:#fff;--warn:#B26A00;--warn-soft:rgba(230,159,0,.14);--draft:#fff7d6;--draft-ink:#6b5600}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0C0E0D;--surface:#151816;--card:#1A1D1B;--ink:#E9ECEA;--sub:#9AA19D;--faint:#6A716D;--line:#242826;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12);--on-accent:#0C0E0D;--warn:#F2B13A;--warn-soft:rgba(242,177,58,.14);--draft:#2a2410;--draft-ink:#e6cf7a}}
-:root[data-theme="dark"]{--bg:#0C0E0D;--surface:#151816;--card:#1A1D1B;--ink:#E9ECEA;--sub:#9AA19D;--faint:#6A716D;--line:#242826;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12);--on-accent:#0C0E0D;--warn:#F2B13A;--warn-soft:rgba(242,177,58,.14);--draft:#2a2410;--draft-ink:#e6cf7a}
+:root{--bg:#06090A;--surface:#0D1112;--card:#111617;--ink:#ECEFEE;--sub:#9AA3A1;--faint:#5F6866;--line:#1C2224;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12);--on-accent:#06090A;--warn:#F2B13A;--warn-soft:rgba(242,177,58,.14);--draft:#2a2410;--draft-ink:#e6cf7a;color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);font:400 16px/1.65 Inter,-apple-system,BlinkMacSystemFont,sans-serif;font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased}
@@ -36,12 +37,16 @@ button{font:inherit;color:inherit;cursor:pointer}
 .top .name{font-size:15px;font-weight:600}
 .kbd{font:500 12px "JetBrains Mono",monospace;color:var(--sub);border:1px solid var(--line);background:var(--card);border-radius:6px;padding:4px 8px}
 .kbd:hover{color:var(--ink)}
-.hero{padding:72px 0 0}
+.hero{position:relative;padding:72px 0 0}
+.hero .copy{position:relative;z-index:1;max-width:620px}
 h1{font-size:clamp(32px,5.6vw,50px);font-weight:600;letter-spacing:-.03em;line-height:1.08;max-width:700px}
 .lede{font-size:18px;color:var(--sub);margin-top:22px;max-width:620px;line-height:1.6}
 .lede b{color:var(--ink);font-weight:500}
 .links{display:flex;gap:22px;flex-wrap:wrap;margin-top:24px;font-size:15px;font-weight:500}
-@media(max-width:600px){.hero{padding-top:44px}}
+.portrait img{display:block;width:100%;height:auto;-webkit-mask-image:radial-gradient(ellipse 62% 60% at 52% 40%,#000 52%,transparent 100%);mask-image:radial-gradient(ellipse 62% 60% at 52% 40%,#000 52%,transparent 100%)}
+@media(min-width:1100px){.hero{min-height:500px}.portrait{position:absolute;top:24px;right:-320px;width:520px;z-index:0;pointer-events:none}}
+@media(min-width:761px) and (max-width:1099px){.hero{display:grid;grid-template-columns:1fr 280px;gap:0;align-items:center}.hero .copy{max-width:none}.portrait{margin-right:-40px}}
+@media(max-width:760px){.hero{display:flex;flex-direction:column;padding-top:8px}.portrait{order:-1;margin:0 auto -36px;width:min(320px,82%)}}
 
 .proof{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:60px}
 .proof div{padding:22px 16px 22px 0}
@@ -148,7 +153,7 @@ footer{margin:110px 0 64px;padding-top:18px;border-top:1px solid var(--line);fon
 footer .hint{color:var(--faint)}
 
 dialog{margin:12vh auto 0;width:min(560px,calc(100% - 32px));border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);padding:0;box-shadow:0 20px 60px rgba(0,0,0,.18)}
-dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
+dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
 #q{width:100%;border:0;border-bottom:1px solid var(--line);background:none;padding:15px 16px;font:15px Inter,sans-serif;color:var(--ink);outline:none}
 #cmds{list-style:none;max-height:340px;overflow:auto;padding:6px}
 #cmds li{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;font-size:14px;cursor:pointer}
@@ -168,6 +173,7 @@ dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
   </div>
 
   <header class="hero">
+    <div class="copy">
     <h1>I built Factory, the system my team's AI coding agents work in, and the Postgres and payment code under our apps.</h1>
     <p class="lede">Senior engineer at <b>YOKE</b>, the company behind <b>NIL Club</b> and <b>Athlete Merch</b>. Before that, six years at <b>Cameo</b>. Thirteen years shipping production software. Based in Zug, Switzerland.</p>
     <div class="links">
@@ -175,6 +181,8 @@ dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
       <a href="https://www.linkedin.com/in/fabricio-santecchia-28b317b9/">LinkedIn</a>
       <a href="https://github.com/fsantecchia">GitHub</a>
     </div>
+    </div>
+    <div class="portrait"><picture><source srcset="assets/fabricio.webp" type="image/webp"><img src="assets/fabricio.jpg" width="512" height="512" alt="Fabricio Santecchia" fetchpriority="high"></picture></div>
   </header>
 
   <div class="proof">
@@ -282,7 +290,7 @@ dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
   </section>
 
   <footer>
-    <div>build <span data-build="sha">a354bb5</span> · deployed <span data-build="date">2026-11-06 14:54 UTC</span> · <span id="weight">page weight measured on load</span></div>
+    <div>build <span data-build="sha">592fada</span> · deployed <span data-build="date">2026-11-06 15:27 UTC</span> · <span id="weight">page weight measured on load</span></div>
     <div>Hand-written HTML, CSS and JS. No framework, no analytics.</div>
     <div class="hint">Press ⌘K or ? for commands.</div>
   </footer>
@@ -505,9 +513,6 @@ dialog::backdrop{background:rgba(10,12,11,.28);backdrop-filter:blur(3px)}
     { n: 'Kill the executor', k: 'x', a: () => { go('factory')(); kill(); } },
     { n: 'Copy email', k: '', a: () => copy('fabricio@fabriciosantecchia.com', 'Email copied') },
     { n: 'Copy short bio', k: '', a: () => copy(BIO.short, 'Bio copied') },
-    { n: 'Theme: light', k: '', a: () => document.documentElement.dataset.theme = 'light' },
-    { n: 'Theme: dark', k: '', a: () => document.documentElement.dataset.theme = 'dark' },
-    { n: 'Theme: system', k: '', a: () => { delete document.documentElement.dataset.theme; } },
   ];
   const pal = $('#pal'), q = $('#q'), list = $('#cmds');
   let sel = 0, shown = CMDS;
