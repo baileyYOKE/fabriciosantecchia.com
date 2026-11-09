@@ -220,7 +220,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
 
     <h3>Engineering decisions</h3>
     <div class="dec">
-      <div><b>Rules live in code, not prompts</b><p>Shell shims and gates refuse any push, simulator or approval an agent isn't leased for.</p></div>
+      <div><b>Rules live in code, not prompts</b><p>Gates outside the agents' control refuse any push, simulator or approval an agent isn't leased for.</p></div>
       <div><b>Letters, not pushes</b><p>An append-only mailbox is the single source of truth, so a crashed agent loses nothing.</p></div>
       <div><b>No single vendor</b><p>Agents fail over between Gemini and Claude on outages or when quota runs low.</p></div>
       <div><b>Every UI change comes with proof</b><p>Simulator screenshots and a blind review from a different model family.</p></div>
@@ -229,7 +229,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
     <ul class="rows">
       <li><div class="main"><div class="t">Pull requests from Factory jobs</div><div class="d">Opened from Slack requests, Sept 16 to Nov 5, 2026</div></div><div class="n"><b>121 of 131</b><span>merged</span></div></li>
       <li><div class="main"><div class="t">Slack request to decision</div><div class="d">Slowest 1%, after moving the Slack door to its own worker thread. During a slow-disk incident: 151 s to 2 s</div></div><div class="n"><b>31.6s → 0.45s</b><span>p99</span></div></li>
-      <li><div class="main"><div class="t">A silent failure, now caught</div><div class="d">On Oct 26 an expired login left 17 agents running empty turns for about 2.5 hours, unnoticed. The watchdog now alerts after two failures in 30 minutes</div></div><div class="n"><b>2.5h → 30m</b><span>to detect</span></div></li>
+      <li><div class="main"><div class="t">A silent failure, now caught</div><div class="d">When model credentials expired, 17 agents kept running empty turns for about 2.5 hours, unnoticed. The watchdog now pages a person when agents produce nothing</div></div><div class="n"><b>2.5h → 30m</b><span>to detect</span></div></li>
       <li><div class="main"><div class="t">Memory per agent simulator</div><div class="d">A slimmed iOS simulator profile built for agent walks</div></div><div class="n"><b>4.3 → 1.6 GB</b><span>per simulator</span></div></li>
     </ul>
   </section>
@@ -271,7 +271,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
   <section id="talks">
     <h2>Talk proposals</h2>
     <ul class="talks">
-      <li><span>From one coding agent to a 13-Mac agent factory: what broke, and what we automated</span><span class="st2">proposal</span></li>
+      <li><span>From one coding agent to an agent factory: what broke, and what we automated</span><span class="st2">proposal</span></li>
       <li><span>Read-your-writes across logical and physical Postgres replication</span><span class="st2">proposal</span></li>
       <li><span>Designing MCP write tools a human can actually confirm</span><span class="st2">proposal</span></li>
       <li><span>How to measure an AI QA tool: planted defects and confidence intervals</span><span class="st2">proposal</span></li>
@@ -299,7 +299,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
   </section>
 
   <footer>
-    <div>build <span data-build="sha">5b4e383</span> · deployed <span data-build="date">2026-11-09 15:55 UTC</span> · <span id="weight">page weight measured on load</span></div>
+    <div>build <span data-build="sha">1aada8e</span> · deployed <span data-build="date">2026-11-09 23:10 UTC</span> · <span id="weight">page weight measured on load</span></div>
     <div>Hand-written HTML, CSS and JS. No framework, no analytics.</div>
     <div class="hint">Press ⌘K or ? for commands.</div>
   </footer>
