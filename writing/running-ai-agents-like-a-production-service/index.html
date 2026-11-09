@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running AI coding agents like a production service · Fabricio Santecchia</title>
+<meta name="description" content="How I run a crew of AI coding agents with the same tools as any production service (an append-only mailbox, leases, isolated worktrees, vendor failover, code-enforced rules and a model-free watchdog), plus the silent-failure incident that changed how I monitor it.">
+<meta property="og:title" content="Running AI coding agents like a production service">
+<meta property="og:description" content="How I run a crew of AI coding agents with the same tools as any production service (an append-only mailbox, leases, isolated worktrees, vendor failover, code-enforced rules and a model-free watchdog), plus the silent-failure incident that changed how I monitor it.">
+<meta property="og:image" content="https://fabriciosantecchia.com/assets/og.jpg">
+<meta property="og:type" content="article">
+<meta name="author" content="Fabricio Santecchia">
+<link rel="canonical" href="https://fabriciosantecchia.com/writing/running-ai-agents-like-a-production-service/">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#06090A;--surface:#0D1112;--ink:#ECEFEE;--sub:#9AA3A1;--faint:#5F6866;--line:#1C2224;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:400 17px/1.75 Inter,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-soft)}
+a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
+a:hover{color:var(--accent)}
+.wrap{max-width:720px;margin:0 auto;padding:0 24px}
+@media(max-width:600px){.wrap{padding:0 16px}}
+header{padding:28px 0;font:500 14px "JetBrains Mono",monospace}
+header a{text-decoration:none;color:var(--sub)} header a:hover{color:var(--accent)}
+.meta{font:500 13px "JetBrains Mono",monospace;color:var(--faint);margin:48px 0 12px}
+h1{font-size:clamp(32px,6vw,48px);line-height:1.12;letter-spacing:-.02em;font-weight:600;text-wrap:balance}
+article{margin:40px 0 0}
+article h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:48px 0 12px}
+article p,article ul,article ol{margin:0 0 18px}
+article li{margin:6px 0 6px 22px}
+article strong{color:#fff;font-weight:600}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font:13px/1.5 "JetBrains Mono",monospace;margin:0 0 22px}
+code{font-family:"JetBrains Mono",monospace;font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
+pre code{background:none;padding:0}
+table{width:100%;border-collapse:collapse;font-size:15px;margin:0 0 22px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)} th{color:var(--sub);font-weight:500}
+td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+.bio{border-top:1px solid var(--line);margin:56px 0 0;padding:24px 0 80px;color:var(--sub);font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><a href="/">← fabriciosantecchia.com</a></header>
+<div class="meta">Fabricio Santecchia · 2026-11-09</div>
+<h1>Running AI coding agents like a production service</h1>
+<article><p>For most of 2026 my team used AI coding agents the way most teams do: one person, one session, watching it work. In September I started building something different. I call it Factory.</p>
+<p>A teammate asks for a change in our team chat. A crew of agents plans it, writes it in an isolated copy of the repository, tests it, proves UI changes on a real iOS simulator, has a model from a different family judge the result blind, and comes back to the chat thread with a pull request and screenshots.</p>
+<p>The agents turned out to be the easy part. What took the time was everything around them. That is the same list you need for any production service: a source of truth that survives crashes, leases so two workers never grab the same resource, health checks that run when nothing else does, failover when a dependency goes down, and gates that hold no matter what the caller says.</p>
+<p>This post covers how Factory is put together, the incident that taught me the most, and what I measured.</p>
+<h2>The shape of it</h2>
+<pre><code>   chat thread
+        |
+        v
+ +----------------------- daemon (the only writer) ----------------------+
+ |   append-only SQLite mailbox (WAL mode): every event is a letter      |
+ +-----------------------------------------------------------------------+
+        ^ pull           ^ pull              ^ pull             ^ pull
+        |                |                   |                  |
+   lead              executor            blind QA            chief
+   one per thread    (fails over         (different model    (supervises
+                     across vendors)     family)             the floor)
+                         |
+          own git worktree + leased iOS simulator
+                         |
+                         v
+                   pull request  ------&gt;  back to the chat thread
+
+   watchdog: plain code, on its own clock, independent of the daemon
+</code></pre>
+<h2>Letters, not pushes</h2>
+<p>Factory is one long-lived daemon. It is the only process that writes to an append-only SQLite database in WAL mode, which I call the mailbox. Every chat event, every message between agents and every decision is a letter appended to it. Nothing is updated in place.</p>
+<p>Agents pull their work from the mailbox. The daemon never pushes into them. Each agent runs in a seat: a headless coding agent session that the daemon starts as a child process. If a seat crashes halfway through a task, nothing is lost. The letters are still there, and the replacement reads them and carries on.</p>
+<p>With a single writer I never have to reason about write contention, and I get an exact, ordered history of what happened. When something goes wrong, I read the letters.</p>
+<h2>Seats and roles</h2>
+<p>Each seat has one job:</p>
+<ul>
+<li><strong>Lead.</strong> One seat per chat thread. It plans the work and talks to the person who asked.</li>
+<li><strong>Executor.</strong> Executor seats write the code, run the tests and walk the simulator.</li>
+<li><strong>Blind QA.</strong> A seat from a different model family judges the result blind.</li>
+<li><strong>Chief.</strong> Supervises the whole floor.</li>
+</ul>
+<p>The split exists for the same reason a service does not approve its own deploys. The seat that built something is the worst judge of it, and two models from the same family are more likely to share a blind spot.</p>
+<h2>Isolation: worktrees and leased simulators</h2>
+<p>Every job gets its own git worktree, so two jobs never edit the same files. The worktree can sit on an instant APFS copy-on-write disk image of a fully installed monorepo, so a new job does not wait for a dependency install.</p>
+<p>Jobs also get their own iOS simulator, on a lease. A lease is a claim with exactly one owner, the same pattern you would use for a distributed lock. A seat without a lease cannot drive a simulator. I cap local simulators and send overflow to a small cluster of office machines, chosen by one placement function.</p>
+<p>Two changes made the cluster affordable. First, a slimmed simulator profile built for agent walks cut a simulator from about 300 processes to about 120, and from 4.3 GB to 1.6 GB of memory. Second, I moved to one agent per remote machine over one shared connection. Before, each remote seat cost 62.9 MB and two processes on the coordinating machine. Now it is about 3.3 MB per machine.</p>
+<h2>No single vendor</h2>
+<p>Executors fall back to a second vendor's model when quota runs low or the vendor has an outage. I treat a model provider like any other external dependency: decide the fallback before you need it, and switch automatically.</p>
+<h2>Rules live in code, not prompts</h2>
+<p>A prompt is a request. An agent working hard to finish a task will sometimes find a way around a request. So every rule that would cause an incident if broken is enforced by code that returns an error.</p>
+<p>Gates that sit outside the agents' control refuse any simulator, push or approval action that a seat is not leased for, and every outgoing message is checked before it is posted. The release runner is deterministic code, and an AI seat appears only at the points that need judgment.</p>
+<h2>Watching the watcher</h2>
+<p>A watchdog runs on its own clock, always, independent of the daemon. There is no model in it. It is plain code, so it keeps working when the daemon or a model vendor is what broke.</p>
+<h2>The incident: 17 agents, 2.5 hours, no work</h2>
+<p>This fall, the model credentials Factory was using expired. The chief and 16 executors kept running turns, and each turn used zero tokens. Nothing failed loudly. It ran that way for about 2.5 hours before anyone noticed.</p>
+<p>Looking back, every signal I had said the system was up. The processes were alive, the daemon was healthy and the mailbox kept moving. The one thing that was broken was the only thing that mattered: no work was getting done. A turn that consumes zero tokens is not a turn.</p>
+<p>The fix was to make that failure visible. The watchdog now pages a person when agents keep taking turns that produce nothing. Time to detect went from about 2.5 hours, unseen, to under 30 minutes.</p>
+<p>The general rule I took from it: check that a service produces output, not just that it is alive. It is the agent version of a web server that returns 200 with an empty body.</p>
+<h2>What I measured</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pull requests from Factory jobs, Sept 16 to Nov 5, 2026</td>
+<td></td>
+<td>131 opened, 121 merged</td>
+</tr>
+<tr>
+<td>Chat request to decision, p99</td>
+<td>31.6 s</td>
+<td>0.45 s</td>
+</tr>
+<tr>
+<td>Same, during a slow-disk incident</td>
+<td>151 s</td>
+<td>2.0 s</td>
+</tr>
+<tr>
+<td>Memory per agent simulator</td>
+<td>4.3 GB</td>
+<td>1.6 GB</td>
+</tr>
+<tr>
+<td>Overhead per remote seat</td>
+<td>62.9 MB, 2 processes</td>
+<td>~3.3 MB per machine</td>
+</tr>
+<tr>
+<td>Time to detect a credential failure</td>
+<td>~2.5 h</td>
+<td>under 30 min</td>
+</tr>
+</tbody>
+</table>
+<p>The latency win came from moving chat intake onto its own worker thread. During a 30 second daemon stall, each incoming event was still acknowledged in 0 to 2 ms.</p>
+<p>One honest note. Since mid-September, most of the code I ship is written by agents that I designed, direct and review. What I am claiming is the system and the judgment built into it, not a typing rate. In a sample of 100 requests to Factory, 90 came from 11 teammates other than me.</p>
+<h2>Lessons learned</h2>
+<ol>
+<li><strong>The agents are the smallest part.</strong> Most of the work is the operations around them.</li>
+<li><strong>One writer, append-only.</strong> A crash then costs a restart, not lost work, and the log explains every incident.</li>
+<li><strong>Lease anything scarce.</strong> Simulators, model accounts and push rights all have exactly one owner at a time.</li>
+<li><strong>Enforce in code.</strong> If breaking a rule is an incident, a prompt is not enough.</li>
+<li><strong>Separate the builder from the judge,</strong> and use a different model family for the judge.</li>
+<li><strong>Keep the watchdog dumb.</strong> No model, its own clock, and no dependency on the thing it watches.</li>
+<li><strong>Measure output, not liveness.</strong> Healthy processes doing nothing are the failure you will not see.</li>
+</ol></article>
+<div class="bio"><p>Fabricio Santecchia is a senior engineer at YOKE, the company behind NIL Club and Athlete Merch, where he built Factory.
+Before YOKE he spent six years as a senior engineer at Cameo. He lives in Zug, Switzerland.</p></div>
+</div>
+</body>
+</html>

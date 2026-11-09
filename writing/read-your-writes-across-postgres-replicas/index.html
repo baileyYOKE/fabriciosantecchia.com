@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Read-your-writes across Postgres replicas with an LSN token · Fabricio Santecchia</title>
+<meta name="description" content="How a WAL LSN token, a one second wait and a fallback to the primary give read-your-writes across logical then physical Postgres replication, carried through both web requests and background jobs.">
+<meta property="og:title" content="Read-your-writes across Postgres replicas with an LSN token">
+<meta property="og:description" content="How a WAL LSN token, a one second wait and a fallback to the primary give read-your-writes across logical then physical Postgres replication, carried through both web requests and background jobs.">
+<meta property="og:image" content="https://fabriciosantecchia.com/assets/og.jpg">
+<meta property="og:type" content="article">
+<meta name="author" content="Fabricio Santecchia">
+<link rel="canonical" href="https://fabriciosantecchia.com/writing/read-your-writes-across-postgres-replicas/">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#06090A;--surface:#0D1112;--ink:#ECEFEE;--sub:#9AA3A1;--faint:#5F6866;--line:#1C2224;--accent:#3DD68C;--accent-soft:rgba(61,214,140,.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:400 17px/1.75 Inter,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-soft)}
+a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
+a:hover{color:var(--accent)}
+.wrap{max-width:720px;margin:0 auto;padding:0 24px}
+@media(max-width:600px){.wrap{padding:0 16px}}
+header{padding:28px 0;font:500 14px "JetBrains Mono",monospace}
+header a{text-decoration:none;color:var(--sub)} header a:hover{color:var(--accent)}
+.meta{font:500 13px "JetBrains Mono",monospace;color:var(--faint);margin:48px 0 12px}
+h1{font-size:clamp(32px,6vw,48px);line-height:1.12;letter-spacing:-.02em;font-weight:600;text-wrap:balance}
+article{margin:40px 0 0}
+article h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:48px 0 12px}
+article p,article ul,article ol{margin:0 0 18px}
+article li{margin:6px 0 6px 22px}
+article strong{color:#fff;font-weight:600}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font:13px/1.5 "JetBrains Mono",monospace;margin:0 0 22px}
+code{font-family:"JetBrains Mono",monospace;font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
+pre code{background:none;padding:0}
+table{width:100%;border-collapse:collapse;font-size:15px;margin:0 0 22px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)} th{color:var(--sub);font-weight:500}
+td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+.bio{border-top:1px solid var(--line);margin:56px 0 0;padding:24px 0 80px;color:var(--sub);font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><a href="/">← fabriciosantecchia.com</a></header>
+<div class="meta">Fabricio Santecchia · 2026-11-09</div>
+<h1>Read-your-writes across Postgres replicas with an LSN token</h1>
+<article><p>This year I moved read traffic off a managed Postgres primary and onto self-hosted Postgres replicas on Kubernetes. Getting a copy of the data in sync was the straightforward part. The hard part was a bug every replica setup has on day one: you save something, the next request reads from a replica, and your change is not there yet.</p>
+<p>This post is about the fix I shipped: a read-your-writes token based on the primary's WAL position. It also covers the details that only showed up because our data takes two hops to reach a replica. The idea is not new, and large teams route reads in similar ways. What I want to share is the execution.</p>
+<h2>The setup</h2>
+<pre><code>  app writes --&gt; managed Postgres primary
+                        |
+                        |  hop 1: native logical replication (decode + apply)
+                        v
+                 subscriber (self-hosted Postgres)
+                        |
+                        |  hop 2: physical streaming (WAL replay)
+               +--------+--------+
+               v                 v
+           replica-1         replica-2     (behind a connection pooler)
+               ^                 ^
+               +---- read router &lt;---- reads that carry a token
+</code></pre>
+<p>The managed primary feeds a self-hosted Postgres subscriber through native logical replication. The subscriber has two physical streaming replicas behind a connection pooler. Reads are routed by percentage, with a heartbeat-based staleness check and a circuit breaker.</p>
+<p>The two hops are the important detail. A write has to be decoded and applied on the subscriber, and then the subscriber's own WAL has to be replayed on the replica. Either hop can lag.</p>
+<h2>Why the obvious fixes are not enough</h2>
+<p>The common shortcuts are to read from the primary for a few seconds after any write, or to pin a user to the primary for the rest of the session. Both work, and both throw away most of the reason you added replicas. They also guess: a fixed window is too long on a quiet night and too short during a lag spike.</p>
+<p>I wanted the read to state exactly how fresh it needs to be, and the database to say whether it can serve that.</p>
+<h2>The token</h2>
+<p>After a write commits, the client asks the primary for its current WAL LSN, the log sequence number that marks a position in the write-ahead log. That value becomes the token. It means "show me data at least this fresh."</p>
+<p>Web requests carry the token with them. Any read that carries it goes through a read router, which answers only from a replica that has applied that position.</p>
+<p>Here is the catch with logical replication. The subscriber writes its own WAL with its own LSNs, so the primary's LSN means nothing if you compare it to the subscriber's position directly. What the subscriber does record is the replication origin's <code>remote_lsn</code>, the last primary position it has applied. That is the number to compare against the token.</p>
+<h2>The wait and the fallback</h2>
+<p>If the replica is behind the token, the router waits, at most one second, for replay to pass it. Usually that takes milliseconds. If no replica catches up in time, the router says so and the caller retries on the primary. The read gets slower, but it is never stale.</p>
+<p>Generic pseudo code, not production code:</p>
+<pre><code># after a write
+commit(tx)
+token = primary.scalar(&quot;select pg_current_wal_lsn()&quot;)
+attach_to_session(token)
+
+# router: serve a read that carries a token
+def read_at_least(sql, token, max_wait=1.0):
+    deadline = now() + max_wait
+    while now() &lt; deadline:
+        applied = replica.scalar(
+            &quot;select remote_lsn from pg_replication_origin_status where external_id = $1&quot;, ORIGIN)
+        if applied &gt;= token:          # compare as pg_lsn, never as strings
+            return replica.query(sql)
+        sleep(0.005)
+    raise Behind()
+
+# client
+try:
+    rows = router.read_at_least(sql, session_token())
+except Behind:
+    rows = primary.query(sql)
+</code></pre>
+<p>The one second cap matters as much as the token. It bounds the worst case for a user, and it turns "replica is behind" into a clear, countable event instead of a slow request nobody can explain.</p>
+<h2>Extending it to workers</h2>
+<p>Web requests are only half the story. Background work has the same problem: a request writes a row, enqueues a job, and the job reads the row back from a replica before the row has arrived.</p>
+<p>So the token travels in the job payload. Whoever enqueues a job after a write attaches the LSN, and the worker passes it to the same read path. I rolled that out across every runtime that reads from the replicas: background job runners, workers, the admin app and the job server.</p>
+<p>The last step was making reads monotonic per scope, automatically. Within a scope, a later read should never see older data than an earlier one. Developers no longer have to remember to thread the token by hand.</p>
+<h2>The numbers</h2>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Median (p50) token wait, before tuning</td>
+<td>~110 ms</td>
+</tr>
+<tr>
+<td>Median (p50) token wait, after <code>wal_writer_delay=10ms</code></td>
+<td>~53 ms</td>
+</tr>
+<tr>
+<td>Replica replay lag behind the subscriber, overnight</td>
+<td>1 to 5 ms</td>
+</tr>
+<tr>
+<td>Lag guard alerts in that window</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>One setting halved the median wait. <code>wal_writer_delay</code> controls how often the WAL writer wakes up to flush WAL that has not been flushed yet. Logical replication apply workers commit with <code>synchronous_commit</code> off by default, so applied changes can wait for the WAL writer before they reach a replica. At the default of 200 ms, that wait sat in the token path. At 10 ms, the median wait roughly halved.</p>
+<h2>What I would tell someone starting</h2>
+<ol>
+<li><strong>Name the freshness you need.</strong> A token beats a timer because it says exactly what the read requires.</li>
+<li><strong>Know which LSN you are comparing.</strong> Across logical replication, the primary's position lives in the subscription origin, not in the subscriber's own WAL.</li>
+<li><strong>Cap the wait and fall back.</strong> Slower is fine. Stale is a bug.</li>
+<li><strong>Follow the write into background jobs.</strong> Read-after-write bugs do not stop at the web request.</li>
+<li><strong>Look at the flush settings.</strong> A default that is fine for throughput can eat most of the latency budget for a token wait.</li>
+</ol></article>
+<div class="bio"><p>Fabricio Santecchia is a senior engineer at YOKE, the company behind NIL Club and Athlete Merch, where he built the Postgres replica layer and Factory.
+Before YOKE he spent six years as a senior engineer at Cameo. He lives in Zug, Switzerland.</p></div>
+</div>
+</body>
+</html>
