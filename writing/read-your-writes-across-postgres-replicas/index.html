@@ -104,32 +104,12 @@ except Behind:
 <p>So the token travels in the job payload. Whoever enqueues a job after a write attaches the LSN, and the worker passes it to the same read path. I rolled that out across every runtime that reads from the replicas: background job runners, workers, the admin app and the job server.</p>
 <p>The last step was making reads monotonic per scope, automatically. Within a scope, a later read should never see older data than an earlier one. Developers no longer have to remember to thread the token by hand.</p>
 <h2>The numbers</h2>
-<table>
-<thead>
-<tr>
-<th>Measure</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Median (p50) token wait, before tuning</td>
-<td>~110 ms</td>
-</tr>
-<tr>
-<td>Median (p50) token wait, after <code>wal_writer_delay=10ms</code></td>
-<td>~53 ms</td>
-</tr>
-<tr>
-<td>Replica replay lag behind the subscriber, overnight</td>
-<td>1 to 5 ms</td>
-</tr>
-<tr>
-<td>Lag guard alerts in that window</td>
-<td>0</td>
-</tr>
-</tbody>
-</table>
+<ul>
+<li><strong>Median (p50) token wait, before tuning:</strong> about 110 ms</li>
+<li><strong>Median (p50) token wait, after <code>wal_writer_delay=10ms</code>:</strong> about 53 ms</li>
+<li><strong>Replica replay lag behind the subscriber, overnight:</strong> 1 to 5 ms</li>
+<li><strong>Lag guard alerts in that window:</strong> 0</li>
+</ul>
 <p>One setting halved the median wait. <code>wal_writer_delay</code> controls how often the WAL writer wakes up to flush WAL that has not been flushed yet. Logical replication apply workers commit with <code>synchronous_commit</code> off by default, so applied changes can wait for the WAL writer before they reach a replica. At the default of 200 ms, that wait sat in the token path. At 10 ms, the median wait roughly halved.</p>
 <h2>What I would tell someone starting</h2>
 <ol>

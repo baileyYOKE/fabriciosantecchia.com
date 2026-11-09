@@ -102,54 +102,21 @@ td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabula
 <p>The fix was to make that failure visible. The watchdog now pages a person when agents keep taking turns that produce nothing. Time to detect went from about 2.5 hours, unseen, to under 30 minutes.</p>
 <p>The general rule I took from it: check that a service produces output, not just that it is alive. It is the agent version of a web server that returns 200 with an empty body.</p>
 <h2>What I measured</h2>
-<table>
-<thead>
-<tr>
-<th>What</th>
-<th>Before</th>
-<th>After</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Pull requests from Factory jobs, Sept 16 to Nov 5, 2026</td>
-<td></td>
-<td>131 opened, 121 merged</td>
-</tr>
-<tr>
-<td>Chat request to decision, p99</td>
-<td>31.6 s</td>
-<td>0.45 s</td>
-</tr>
-<tr>
-<td>Same, during a slow-disk incident</td>
-<td>151 s</td>
-<td>2.0 s</td>
-</tr>
-<tr>
-<td>Memory per agent simulator</td>
-<td>4.3 GB</td>
-<td>1.6 GB</td>
-</tr>
-<tr>
-<td>Overhead per remote seat</td>
-<td>62.9 MB, 2 processes</td>
-<td>~3.3 MB per machine</td>
-</tr>
-<tr>
-<td>Time to detect a credential failure</td>
-<td>~2.5 h</td>
-<td>under 30 min</td>
-</tr>
-</tbody>
-</table>
+<ul>
+<li><strong>Pull requests from Factory jobs, Sept 16 to Nov 5, 2026:</strong> 131 opened, 121 merged</li>
+<li><strong>Chat request to decision, p99:</strong> 31.6 s before, 0.45 s after</li>
+<li><strong>Same, during a slow-disk incident:</strong> 151 s before, 2.0 s after</li>
+<li><strong>Memory per agent simulator:</strong> 4.3 GB before, 1.6 GB after</li>
+<li><strong>Overhead per remote seat:</strong> 62.9 MB and 2 processes before, about 3.3 MB per machine after</li>
+<li><strong>Time to detect a credential failure:</strong> about 2.5 h before, under 30 min after</li>
+</ul>
 <p>The latency win came from moving chat intake onto its own worker thread. During a 30 second daemon stall, each incoming event was still acknowledged in 0 to 2 ms.</p>
 <p>One honest note. Since mid-September, most of the code I ship is written by agents that I designed, direct and review. What I am claiming is the system and the judgment built into it, not a typing rate. In a sample of 100 requests to Factory, 90 came from 11 teammates other than me.</p>
 <h2>Lessons learned</h2>
 <ol>
 <li><strong>The agents are the smallest part.</strong> Most of the work is the operations around them.</li>
 <li><strong>One writer, append-only.</strong> A crash then costs a restart, not lost work, and the log explains every incident.</li>
-<li><strong>Lease anything scarce.</strong> Simulators, model accounts and push rights all have exactly one owner at a time.</li>
+<li><strong>Lease anything scarce.</strong> Simulators and push rights each have exactly one owner at a time.</li>
 <li><strong>Enforce in code.</strong> If breaking a rule is an incident, a prompt is not enough.</li>
 <li><strong>Separate the builder from the judge,</strong> and use a different model family for the judge.</li>
 <li><strong>Keep the watchdog dumb.</strong> No model, its own clock, and no dependency on the thing it watches.</li>
