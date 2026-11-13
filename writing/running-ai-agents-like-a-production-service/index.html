@@ -75,8 +75,8 @@ td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabula
    watchdog: plain code, on its own clock, independent of the daemon
 </code></pre>
 <h2>Letters, not pushes</h2>
-<p>Factory is one long-lived daemon. It is the only process that writes to an append-only SQLite database in WAL mode, which I call the mailbox. Every chat event, every message between agents and every decision is a letter appended to it. Nothing is updated in place.</p>
-<p>Agents pull their work from the mailbox. The daemon never pushes into them. Each agent runs in a seat: a headless coding agent session that the daemon starts as a child process. If a seat crashes halfway through a task, nothing is lost. The letters are still there, and the replacement reads them and carries on.</p>
+<p>Factory is one long-lived daemon. It is the only process that writes to a SQLite database in WAL mode, which I call the mailbox. Every chat event, every message between agents and every decision is a letter appended to a log in that database. The letter log is append-only: a letter is never changed after it is written. The daemon also keeps its job and thread records in the same database, and those it updates in place.</p>
+<p>Each agent runs in a seat: a headless coding agent session that the daemon starts as a child process. Every seat reads its own inbox, and the daemon streams new letters to the seats as they arrive. If a seat crashes halfway through a task, nothing is lost. The letters are still there, and the replacement reads them and carries on.</p>
 <p>With a single writer I never have to reason about write contention, and I get an exact, ordered history of what happened. When something goes wrong, I read the letters.</p>
 <h2>Seats and roles</h2>
 <p>Each seat has one job:</p>
@@ -105,13 +105,14 @@ td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabula
 <p>The general rule I took from it: check that a service produces output, not just that it is alive. It is the agent version of a web server that returns 200 with an empty body.</p>
 <h2>What I measured</h2>
 <ul>
-<li><strong>Pull requests from Factory jobs, Sept 16 to Nov 5, 2026:</strong> 131 opened, 121 merged</li>
+<li><strong>Pull requests from Factory jobs, Sept 16 to Nov 5, 2026:</strong> 137 opened, 131 merged</li>
 <li><strong>Chat request to decision, p99:</strong> 31.6 s before, 0.45 s after</li>
 <li><strong>Same, during a slow-disk incident:</strong> 151 s before, 2.0 s after</li>
 <li><strong>Memory per agent simulator:</strong> 4.3 GB before, 1.6 GB after</li>
 <li><strong>Overhead per remote seat:</strong> 62.9 MB and 2 processes before, about 3.3 MB per machine after</li>
 <li><strong>Time to detect a credential failure:</strong> about 2.5 h before, under 30 min after</li>
 </ul>
+<p>How we counted: the pull request figures were counted from GitHub on Nov 13, 2026, for pull requests opened by Factory jobs between Sept 16 and Nov 5, 2026.</p>
 <p>The latency win came from moving chat intake onto its own worker thread. During a 30 second daemon stall, each incoming event was still acknowledged in 0 to 2 ms.</p>
 <p>One honest note. Since mid-September, most of the code I ship is written by agents that I designed, direct and review. What I am claiming is the system and the judgment built into it, not a typing rate. In a sample of 100 requests to Factory, 90 came from 11 teammates other than me.</p>
 <h2>Lessons learned</h2>

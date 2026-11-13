@@ -72,15 +72,16 @@ td:last-child{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabula
 <p>The common shortcuts are to read from the primary for a few seconds after any write, or to pin a user to the primary for the rest of the session. Both work, and both throw away most of the reason you added replicas. They also guess: a fixed window is too long on a quiet night and too short during a lag spike.</p>
 <p>I wanted the read to state exactly how fresh it needs to be, and the database to say whether it can serve that.</p>
 <h2>The token</h2>
-<p>After a write commits, the client asks the primary for its current WAL LSN, the log sequence number that marks a position in the write-ahead log. That value becomes the token. It means "show me data at least this fresh."</p>
+<p>Right after the commit returns, the client asks the primary for its current WAL insert position, <code>pg_current_wal_insert_lsn()</code>. An LSN is a log sequence number, which marks a position in the write-ahead log. That value becomes the token. It means "show me data at least this fresh."</p>
+<p>The insert position is the right one to take. <code>pg_current_wal_lsn()</code> returns the write position, and with an asynchronous commit the commit can return before its WAL has been written. A token taken from the write position can then sit behind the commit it is meant to cover, and a replica that reaches the token can still serve a stale read.</p>
 <p>Web requests carry the token with them. Any read that carries it goes through a read router, which answers only from a replica that has applied that position.</p>
 <p>Here is the catch with logical replication. The subscriber writes its own WAL with its own LSNs, so the primary's LSN means nothing if you compare it to the subscriber's position directly. What the subscriber does record is the replication origin's <code>remote_lsn</code>, the last primary position it has applied. That is the number to compare against the token.</p>
 <h2>The wait and the fallback</h2>
 <p>If the replica is behind the token, the router waits, at most one second, for replay to pass it. Usually that takes milliseconds. If no replica catches up in time, the router says so and the caller retries on the primary. The read gets slower, but it is never stale.</p>
 <p>Generic pseudo code, not production code:</p>
-<pre><code># after a write
+<pre><code># right after the commit returns
 commit(tx)
-token = primary.scalar(&quot;select pg_current_wal_lsn()&quot;)
+token = primary.scalar(&quot;select pg_current_wal_insert_lsn()&quot;)
 attach_to_session(token)
 
 # router: serve a read that carries a token
